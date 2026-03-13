@@ -7,7 +7,7 @@ public partial class LOD_Collider_Generator : MeshInstance3D
 	[Export] public int SelectedLOD = 0;
 	[Export] public string SavePath = "res://saved_lod.mesh";
 	[Export] public string SavePath_col = "res://saved_lod_col.res";
-	public enum ColliderType { Convex, Trimesh }
+	public enum ColliderType { Convex, Convex_Simplified, Trimesh, Box, Cylinder, Sphere }
 
 	[Export] public ColliderType colliderType = ColliderType.Trimesh;
 	[Export]
@@ -16,7 +16,8 @@ public partial class LOD_Collider_Generator : MeshInstance3D
 		get => false;
 		set
 		{
-			GenerateAndSave();
+			if (value)
+				GenerateAndSave();
 		}
 	}
 
@@ -79,15 +80,55 @@ public partial class LOD_Collider_Generator : MeshInstance3D
 		col_shape.Name = $"Collider_LOD_{colliderType.ToString()}_{SelectedLOD}";
 		AddSibling(col_shape);
 		col_shape.Owner = GetTree().EditedSceneRoot;
+		Shape3D col_shape_resource;
+		Aabb aabb;
+		Vector3 aabb_size;
 		switch (colliderType)
 		{
 			case ColliderType.Convex:
-				col_shape.Shape = lodMesh.CreateConvexShape();
+				col_shape_resource = lodMesh.CreateConvexShape();
+				GD.Print($"Convex Points Count = {((ConvexPolygonShape3D)col_shape_resource).Points.Length}");
 				break;
+			case ColliderType.Convex_Simplified:
+				col_shape_resource = lodMesh.CreateConvexShape(true, true);
+				GD.Print($"Convex_Simplified Points Count = {((ConvexPolygonShape3D)col_shape_resource).Points.Length}");
+				break;
+
 			case ColliderType.Trimesh:
-				col_shape.Shape = lodMesh.CreateTrimeshShape();
+				col_shape_resource = lodMesh.CreateTrimeshShape();
+				GD.Print($"Concave (Trimesh) Faces Count = {((ConcavePolygonShape3D)col_shape_resource).GetFaces().Length}");
 				break;
+			case ColliderType.Box:
+				BoxShape3D boxShape = new();
+				col_shape_resource = boxShape;
+				aabb = lodMesh.GetAabb();
+				boxShape.Size = aabb.Size;
+				col_shape.Position = aabb.GetCenter();
+				GD.Print($"Primitive Box Collider");
+				break;
+			case ColliderType.Cylinder:
+				CylinderShape3D cylinderShape = new();
+				col_shape_resource = cylinderShape;
+				aabb = lodMesh.GetAabb();
+				aabb_size = aabb.Size;
+				cylinderShape.Height = aabb_size.Y;
+				cylinderShape.Radius = MathF.Sqrt(aabb_size.X * aabb_size.X + aabb_size.Z * aabb_size.Z) * 0.5f;
+				col_shape.Position = aabb.GetCenter();
+				GD.Print($"Primitive Cylinder Collider");
+				break;
+			case ColliderType.Sphere:
+				SphereShape3D sphereShape = new();
+				col_shape_resource = sphereShape;
+				aabb = lodMesh.GetAabb();
+				aabb_size = aabb.Size;
+				sphereShape.Radius = MathF.Sqrt(aabb_size.X * aabb_size.X + aabb_size.Z * aabb_size.Z) * 0.5f;
+				col_shape.Position = aabb.GetCenter();
+				GD.Print($"Primitive Sphere Collider");
+				break;
+
+			default: col_shape_resource = new BoxShape3D(); break;
 		}
+		col_shape.Shape = col_shape_resource;
 		col_shape.Shape.TakeOverPath(SavePath_col);
 		Error err_COL = ResourceSaver.Save(col_shape.Shape, SavePath_col);
 		if (err == Error.Ok)
